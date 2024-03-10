@@ -54,6 +54,7 @@
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_Logger/AP_Logger.h>
 #include "AP_GPS_FixType.h"
+#include <random>
 
 #define GPS_RTK_INJECT_TO_ALL 127
 #ifndef GPS_MAX_RATE_MS
@@ -171,7 +172,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Description: This sets the SBAS (satellite based augmentation system) mode if available on this GPS. If set to 2 then the SBAS mode is not changed in the GPS. Otherwise the GPS will be reconfigured to enable/disable SBAS. Disabling SBAS may be worthwhile in some parts of the world where an SBAS signal is available but the baseline is too long to be useful.
     // @Values: 0:Disabled,1:Enabled,2:NoChange
     // @User: Advanced
-    AP_GROUPINFO("_SBAS_MODE", 5, AP_GPS, _sbas_mode, 2),
+    AP_GROUPINFO("_SBAS_MODE", 5, AP_GPS, _sbas_mode, 0),
 
     // @Param: _MIN_ELEV
     // @DisplayName: Minimum elevation
@@ -194,7 +195,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Description: Masked with the SBP msg_type field to determine whether SBR1/SBR2 data is logged
     // @Values: 0:None (0x0000),-1:All (0xFFFF),-256:External only (0xFF00)
     // @User: Advanced
-    AP_GROUPINFO("_SBP_LOGMASK", 8, AP_GPS, _sbp_logmask, -256),
+    AP_GROUPINFO("_SBP_LOGMASK", 8, AP_GPS, _sbp_logmask, 0),
 #endif //AP_GPS_SBP2_ENABLED || AP_GPS_SBP_ENABLED
 
     // @Param: _RAW_DATA
@@ -217,7 +218,7 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Description: Determines whether the configuration for this GPS should be written to non-volatile memory on the GPS. Currently working for UBlox 6 series and above.
     // @Values: 0:Do not save config,1:Save config,2:Save only when needed
     // @User: Advanced
-    AP_GROUPINFO("_SAVE_CFG", 11, AP_GPS, _save_config, 2),
+    AP_GROUPINFO("_SAVE_CFG", 11, AP_GPS, _save_config, 0),
 
 #if GPS_MAX_RECEIVERS > 1
     // @Param: _GNSS_MODE2
@@ -314,7 +315,8 @@ const AP_Param::GroupInfo AP_GPS::var_info[] = {
     // @Range: 0 250
     // @User: Advanced
     // @RebootRequired: True
-    AP_GROUPINFO("_DELAY_MS", 18, AP_GPS, _delay_ms[0], 0),
+    // TODO: GPS is less responsive if it updates less frequently
+    AP_GROUPINFO("_DELAY_MS", 18, AP_GPS, _delay_ms[0], 250),
 
 #if GPS_MAX_RECEIVERS > 1
     // @Param: _DELAY_MS2
@@ -510,6 +512,9 @@ uint8_t AP_GPS::num_sensors(void) const
     return num_instances;
 }
 
+/*
+    TODO: who is setting these values? can we also just send the values without the bool gate?
+*/
 bool AP_GPS::speed_accuracy(uint8_t instance, float &sacc) const
 {
     if (state[instance].have_speed_accuracy) {
@@ -1073,7 +1078,7 @@ void AP_GPS::get_RelPosHeading(uint32_t &timestamp, float &relPosHeading, float 
     for (uint8_t i=0; i< GPS_MAX_RECEIVERS; i++) {
         if (drivers[i] &&
             state[i].relposheading_ts != 0 &&
-            AP_HAL::millis() - state[i].relposheading_ts < 500) {
+            AP_HAL::millis() - state[i].relposheading_ts < 5000) {
            relPosHeading = state[i].relPosHeading;
            relPosLength = state[i].relPosLength;
            relPosD = state[i].relPosD;
@@ -1239,7 +1244,7 @@ void AP_GPS::update_primary(void)
 #if defined(GPS_BLENDED_INSTANCE)
     // handling switching away from blended GPS
     if (primary_instance == GPS_BLENDED_INSTANCE) {
-        primary_instance = 0;
+        primary_instance = 0; not using configured AHRS type
         for (uint8_t i=1; i<GPS_MAX_RECEIVERS; i++) {
             // choose GPS with highest state or higher number of
             // satellites. Reject a GPS with an old update time, as it
@@ -1438,6 +1443,7 @@ void AP_GPS::inject_data(uint8_t instance, const uint8_t *data, uint16_t len)
  */
 uint16_t AP_GPS::gps_yaw_cdeg(uint8_t instance) const
 {
+
     if (!have_gps_yaw_configured(instance)) {
         return 0;
     }
@@ -1997,34 +2003,34 @@ void AP_GPS::calc_blended_state(void)
         // calculate a blended average velocity
         state[GPS_BLENDED_INSTANCE].velocity += state[i].velocity * _blend_weights[i];
 
-        // report the best valid accuracies and DOP metrics
-
-        if (state[i].have_horizontal_accuracy && state[i].horizontal_accuracy > 0.0f && state[i].horizontal_accuracy < state[GPS_BLENDED_INSTANCE].horizontal_accuracy) {
-            state[GPS_BLENDED_INSTANCE].have_horizontal_accuracy = true;
-            state[GPS_BLENDED_INSTANCE].horizontal_accuracy = state[i].horizontal_accuracy;
-        }
-
-        if (state[i].have_vertical_accuracy && state[i].vertical_accuracy > 0.0f && state[i].vertical_accuracy < state[GPS_BLENDED_INSTANCE].vertical_accuracy) {
-            state[GPS_BLENDED_INSTANCE].have_vertical_accuracy = true;
-            state[GPS_BLENDED_INSTANCE].vertical_accuracy = state[i].vertical_accuracy;
-        }
+        // always report accuracies and DOP metrics
+        state[GPS_BLENDED_INSTANCE].have_vertical_accuracy = true;
+        state[GPS_BLENDED_INSTANCE].have_horizontal_accuracy = true;
+        state[GPS_BLENDED_INSTANCE].horizontal_accuracy = state[i].horizontal_accuracy;
+        state[GPS_BLENDED_INSTANCE].vertical_accuracy = state[i].vertical_accuracy;
+        
 
         if (state[i].have_vertical_velocity) {
             state[GPS_BLENDED_INSTANCE].have_vertical_velocity = true;
         }
 
+        state[GPS_BLENDED_INSTANCE].have_speed_accuracy = true;
+        state[GPS_BLENDED_INSTANCE].speed_accuracy = state[i].speed_accuracy;
         if (state[i].have_speed_accuracy && state[i].speed_accuracy > 0.0f && state[i].speed_accuracy < state[GPS_BLENDED_INSTANCE].speed_accuracy) {
             state[GPS_BLENDED_INSTANCE].have_speed_accuracy = true;
             state[GPS_BLENDED_INSTANCE].speed_accuracy = state[i].speed_accuracy;
         }
 
-        if (state[i].hdop > 0 && state[i].hdop < state[GPS_BLENDED_INSTANCE].hdop) {
-            state[GPS_BLENDED_INSTANCE].hdop = state[i].hdop;
-        }
+        // if (state[i].hdop > 0 && state[i].hdop < state[GPS_BLENDED_INSTANCE].hdop) {
+        //     state[GPS_BLENDED_INSTANCE].hdop = state[i].hdop;
+        // }
+        state[GPS_BLENDED_INSTANCE].hdop = state[i].hdop; // TODO: randomize
 
-        if (state[i].vdop > 0 && state[i].vdop < state[GPS_BLENDED_INSTANCE].vdop) {
-            state[GPS_BLENDED_INSTANCE].vdop = state[i].vdop;
-        }
+        // if (state[i].vdop > 0 && state[i].vdop < state[GPS_BLENDED_INSTANCE].vdop) {
+        //     state[GPS_BLENDED_INSTANCE].vdop = state[i].vdop;
+        // }
+        state[GPS_BLENDED_INSTANCE].vdop = state[i].vdop;
+        
 
         if (state[i].num_sats > 0 && state[i].num_sats > state[GPS_BLENDED_INSTANCE].num_sats) {
             state[GPS_BLENDED_INSTANCE].num_sats = state[i].num_sats;
@@ -2072,11 +2078,19 @@ void AP_GPS::calc_blended_state(void)
     }
 
     // Add the sum of weighted offsets to the reference location to obtain the blended location
-    state[GPS_BLENDED_INSTANCE].location.offset(blended_NE_offset_m.x, blended_NE_offset_m.y);
+    std::random_device rd;
+    std::mt19937 num_generator(rd());
+    std::uniform_real_distribution<float> signs(-1.0, 1.0);
+    auto dir = signs(num_generator);
+    float randX = 1 * dir;
+    float randY = 1 * dir;
+    
+    state[GPS_BLENDED_INSTANCE].location.offset(blended_NE_offset_m.x * randX, blended_NE_offset_m.y * randY);
     state[GPS_BLENDED_INSTANCE].location.alt += (int)blended_alt_offset_cm;
 
     // Calculate ground speed and course from blended velocity vector
-    state[GPS_BLENDED_INSTANCE].ground_speed = state[GPS_BLENDED_INSTANCE].velocity.xy().length();
+    float randomizeSpeed = signs(num_generator);
+    state[GPS_BLENDED_INSTANCE].ground_speed = state[GPS_BLENDED_INSTANCE].velocity.xy().length() * randomizeSpeed;
     state[GPS_BLENDED_INSTANCE].ground_course = wrap_360(degrees(atan2f(state[GPS_BLENDED_INSTANCE].velocity.y, state[GPS_BLENDED_INSTANCE].velocity.x)));
 
     // If the GPS week is the same then use a blended time_week_ms

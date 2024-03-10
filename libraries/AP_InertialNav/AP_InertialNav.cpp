@@ -40,7 +40,7 @@ void AP_InertialNav::update(bool high_vibes)
     if (!velned_ok || high_vibes) {
         float rate_z;
         if (_ahrs_ekf.get_vert_pos_rate_D(rate_z)) {
-            _velocity_cm.z = -rate_z * 100; // convert from m/s in NED to cm/s in NEU
+            /* _velocity_cm.z = -rate_z * 100; // convert from m/s in NED to cm/s in NEU */
         }
     }
 }
