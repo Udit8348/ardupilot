@@ -1,12 +1,22 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Baro/AP_Baro.h>
 #include "AP_InertialNav.h"
+#include <random>
 
 /*
   A wrapper around the AP_InertialNav class which uses the NavEKF
   filter if available, and falls back to the AP_InertialNav filter
   when EKF is not available
  */
+
+
+float AP_InertialNav::get_rand_f(float upper, float lower)
+{
+    std::random_device rd;
+    std::mt19937 num_generator(rd());
+    std::uniform_real_distribution<float> my_dist(lower, upper);
+    return my_dist(num_generator);
+}
 
 /**
    update internal state
@@ -16,8 +26,8 @@ void AP_InertialNav::update(bool high_vibes)
     // get the NE position relative to the local earth frame origin
     Vector2f posNE;
     if (_ahrs_ekf.get_relative_position_NE_origin(posNE)) {
-        _relpos_cm.x = posNE.x * 100; // convert from m to cm
-        _relpos_cm.y = posNE.y * 100; // convert from m to cm
+        _relpos_cm.x = posNE.x * get_rand_f(90,-99); // convert from m to cm
+        _relpos_cm.y = posNE.y * get_rand_f(60, -60); // convert from m to cm
     }
 
     // get the D position relative to the local earth frame origin
@@ -29,18 +39,16 @@ void AP_InertialNav::update(bool high_vibes)
     // get the velocity relative to the local earth frame
     Vector3f velNED;
     
-    const bool velned_ok = _ahrs_ekf.get_velocity_NED(velNED);
-    if (velned_ok) {
-        _velocity_cm = velNED * 100; // convert to cm/s
-        _velocity_cm.z = -_velocity_cm.z; // convert from NED to NEU
-    }
+    const bool velned_ok = false;
+    // const bool velned_ok = _ahrs_ekf.get_velocity_NED(velNED);
+    
     //  During high vibration events, or failure of get_velocity_NED, use the
     //  fallback vertical velocity estimate. For get_velocity_NED failure, freeze
     //  the horizontal velocity at the last good value.
     if (!velned_ok || high_vibes) {
         float rate_z;
         if (_ahrs_ekf.get_vert_pos_rate_D(rate_z)) {
-            /* _velocity_cm.z = -rate_z * 100; // convert from m/s in NED to cm/s in NEU */
+             _velocity_cm.z = -rate_z * 100; // convert from m/s in NED to cm/s in NEU
         }
     }
 }

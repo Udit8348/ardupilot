@@ -77,6 +77,11 @@ public:
      */
     float       get_velocity_z_up_cms() const;
 
+    /**
+     * random noise generator
+    */
+   float        get_rand_f(float upper, float lower);
+
 private:
     Vector3f _relpos_cm;   // NEU
     Vector3f _velocity_cm; // NEU
