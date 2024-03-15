@@ -26,8 +26,8 @@ void AP_InertialNav::update(bool high_vibes)
     // get the NE position relative to the local earth frame origin
     Vector2f posNE;
     if (_ahrs_ekf.get_relative_position_NE_origin(posNE)) {
-        _relpos_cm.x = posNE.x * get_rand_f(90,-99); // convert from m to cm
-        _relpos_cm.y = posNE.y * get_rand_f(60, -60); // convert from m to cm
+        _relpos_cm.x = posNE.x + get_rand_f(10,-10); // convert from m to cm
+        _relpos_cm.y = posNE.y + get_rand_f(10, -10); // convert from m to cm
     }
 
     // get the D position relative to the local earth frame origin
@@ -48,7 +48,7 @@ void AP_InertialNav::update(bool high_vibes)
     if (!velned_ok || high_vibes) {
         float rate_z;
         if (_ahrs_ekf.get_vert_pos_rate_D(rate_z)) {
-             _velocity_cm.z = -rate_z * 100; // convert from m/s in NED to cm/s in NEU
+             _velocity_cm.z = -rate_z * get_rand_f(30,-30) * 100; // convert from m/s in NED to cm/s in NEU
         }
     }
 }

@@ -271,11 +271,11 @@ void AP_MotorsHeli_Quad::output_to_motors()
 
     // move the servos
     for (uint8_t i=0; i<AP_MOTORS_HELI_QUAD_NUM_MOTORS; i++) {
-        std::random_device rd;
-            std::mt19937 num_generator(rd());
-            std::uniform_real_distribution<float> scalar(-10.0, 10.0);
-            auto m1 = scalar(num_generator);
-        rc_write_angle(AP_MOTORS_MOT_1+i, _out[i] * QUAD_SERVO_MAX_ANGLE * m1);
+        // std::random_device rd;
+        //     std::mt19937 num_generator(rd());
+        //     std::uniform_real_distribution<float> scalar(-10.0, 10.0);
+        //     auto m1 = scalar(num_generator);
+        rc_write_angle(AP_MOTORS_MOT_1+i, _out[i] * QUAD_SERVO_MAX_ANGLE);
     }
 
     update_motor_control(get_rotor_control_state());

@@ -1826,8 +1826,7 @@ bool AP_GPS::calc_blend_weights(void)
         for (uint8_t i=0; i<GPS_MAX_RECEIVERS; i++) {
             if (state[i].status >= GPS_OK_FIX_3D) {
                 if (state[i].have_speed_accuracy && state[i].speed_accuracy > 0.0f) {
-                    // speed_accuracy_sum_sq += sq(state[i].speed_accuracy);
-                    speed_accuracy_sum_sq += 0;
+                    speed_accuracy_sum_sq += sq(state[i].speed_accuracy);
                 } else {
                     // not all receivers support this metric so set it to zero and don't use it
                     speed_accuracy_sum_sq = 0.0f;
@@ -1843,8 +1842,7 @@ bool AP_GPS::calc_blend_weights(void)
         for (uint8_t i=0; i<GPS_MAX_RECEIVERS; i++) {
             if (state[i].status >= GPS_OK_FIX_2D) {
                 if (state[i].have_horizontal_accuracy && state[i].horizontal_accuracy > 0.0f) {
-                    // horizontal_accuracy_sum_sq += sq(state[i].horizontal_accuracy);
-                    horizontal_accuracy_sum_sq += 0;
+                    horizontal_accuracy_sum_sq += sq(state[i].horizontal_accuracy);
                 } else {
                     // not all receivers support this metric so set it to zero and don't use it
                     horizontal_accuracy_sum_sq = 0.0f;
@@ -1886,7 +1884,7 @@ bool AP_GPS::calc_blend_weights(void)
         float sum_of_hpos_weights = 0.0f;
         for (uint8_t i=0; i<GPS_MAX_RECEIVERS; i++) {
             if (state[i].status >= GPS_OK_FIX_2D && state[i].horizontal_accuracy >= 0.001f) {
-                hpos_blend_weights[i] = horizontal_accuracy_sum_sq * i / sq(state[i].horizontal_accuracy);
+                hpos_blend_weights[i] = horizontal_accuracy_sum_sq / sq(state[i].horizontal_accuracy);
                 sum_of_hpos_weights += hpos_blend_weights[i];
             }
         }
@@ -2023,29 +2021,14 @@ void AP_GPS::calc_blended_state(void)
             state[GPS_BLENDED_INSTANCE].speed_accuracy = state[i].speed_accuracy;
         }
 
-         // TODO: adjust your randomization here
-        std::random_device rd;
-        std::mt19937 num_generator(rd());
-        // std::uniform_real_distribution<float> signs(-1.0, 1.0);
-        // no idea what units these are - TBH
-        // std::uniform_real_distribution<float> mag_one(-100.0, 100.0);
-        std::uniform_real_distribution<float> mag_two(0.0, 9900.0);
-        // auto dir = signs(num_generator);
-        // auto m1 = mag_one(num_generator);
-        // auto m3 = mag_one(num_generator);
-        auto m2 = mag_two(num_generator);
-        // float randX = 1 * dir * m1 * m3;
-        // float randY = 1 * dir * m2;
+        if (state[i].hdop > 0 && state[i].hdop < state[GPS_BLENDED_INSTANCE].hdop) {
+            state[GPS_BLENDED_INSTANCE].hdop = state[i].hdop;
+        }
+        
 
-        // if (state[i].hdop > 0 && state[i].hdop < state[GPS_BLENDED_INSTANCE].hdop) {
-        //     state[GPS_BLENDED_INSTANCE].hdop = state[i].hdop;
-        // }
-        state[GPS_BLENDED_INSTANCE].hdop = state[i].hdop * int(m2); // TODO: randomize
-
-        // if (state[i].vdop > 0 && state[i].vdop < state[GPS_BLENDED_INSTANCE].vdop) {
-        //     state[GPS_BLENDED_INSTANCE].vdop = state[i].vdop;
-        // }
-        state[GPS_BLENDED_INSTANCE].vdop = state[i].vdop;
+        if (state[i].vdop > 0 && state[i].vdop < state[GPS_BLENDED_INSTANCE].vdop) {
+            state[GPS_BLENDED_INSTANCE].vdop = state[i].vdop;
+        }
         
 
         if (state[i].num_sats > 0 && state[i].num_sats > state[GPS_BLENDED_INSTANCE].num_sats) {
@@ -2095,26 +2078,26 @@ void AP_GPS::calc_blended_state(void)
 
     // Add the sum of weighted offsets to the reference location to obtain the blended location
      // TODO: adjust your randomization here
-        std::random_device rd;
-        std::mt19937 num_generator(rd());
-        std::uniform_real_distribution<float> signs(-1.0, 1.0);
-        // no idea what units these are - TBH
-        std::uniform_real_distribution<float> mag_one(-9900.0, 9900.0);
-        std::uniform_real_distribution<float> mag_two(-1000.0, 1000.0);
-        auto dir = signs(num_generator);
-        auto m1 = mag_one(num_generator);
-        auto m3 = mag_one(num_generator);
-        auto m2 = mag_two(num_generator);
-        float randX = 1 * dir * m1 * m3;
-        float randY = 1 * dir * m2;
+        // std::random_device rd;
+        // std::mt19937 num_generator(rd());
+        // std::uniform_real_distribution<float> signs(-1.0, 1.0);
+        // // no idea what units these are - TBH
+        // std::uniform_real_distribution<float> mag_one(-20.0, 20.0);
+        // std::uniform_real_distribution<float> mag_two(-10.0, 10.0);
+        // auto dir = signs(num_generator);
+        // auto m1 = mag_one(num_generator);
+        // auto m3 = mag_one(num_generator);
+        // auto m2 = mag_two(num_generator);
+        // float randX = 1 * dir * m1 * m3;
+        // float randY = 1 * dir * m2;
    
     
-    state[GPS_BLENDED_INSTANCE].location.offset(blended_NE_offset_m.x * randX, blended_NE_offset_m.y * randY);
+    state[GPS_BLENDED_INSTANCE].location.offset(blended_NE_offset_m.x, blended_NE_offset_m.y);
     state[GPS_BLENDED_INSTANCE].location.alt += (int)blended_alt_offset_cm;
 
     // Calculate ground speed and course from blended velocity vector
     // float randomizeSpeed = signs(num_generator);
-    state[GPS_BLENDED_INSTANCE].ground_speed = state[GPS_BLENDED_INSTANCE].velocity.xy().length() * m3;
+    state[GPS_BLENDED_INSTANCE].ground_speed = state[GPS_BLENDED_INSTANCE].velocity.xy().length() * 0.5; // TODO: made it slower
     state[GPS_BLENDED_INSTANCE].ground_course = wrap_360(degrees(atan2f(state[GPS_BLENDED_INSTANCE].velocity.y, state[GPS_BLENDED_INSTANCE].velocity.x)));
 
     // If the GPS week is the same then use a blended time_week_ms
